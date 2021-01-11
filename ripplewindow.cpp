@@ -6,10 +6,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QTimer>
+#include <QWindow>
 
 HHOOK RippleWindow::m_mousehook=NULL;
 HWND RippleWindow::m_WinId=NULL;
 HWND RippleWindow::m_workerw=NULL;
+RippleWindow* RippleWindow::m_instance=nullptr;
+int RippleWindow::m_radius=20;
+GLfloat RippleWindow::m_strength=0.01;
 
 static GLfloat vertArray[]={
     -1.0,1.0,
@@ -99,22 +103,39 @@ static const char* dropFrag=
         "	gl_FragColor = info;\n"
         "}\n";
 
-RippleWindow::RippleWindow(QWindow* parent,bool insfilter)
-    :QOpenGLWindow(QOpenGLWindow::PartialUpdateBlend),m_texture(nullptr)
+RippleWindow* RippleWindow::getInstance()
+{
+    if(!m_instance)
+    {
+        m_instance=new RippleWindow();
+    }
+    return m_instance;
+}
+
+void RippleWindow::destroyRippleWindow()
+{
+    if(m_instance)
+    {
+        delete m_instance;
+    }
+    m_instance=nullptr;
+}
+
+RippleWindow::RippleWindow(QWindow* parent)
+    :QOpenGLWindow(QOpenGLWindow::PartialUpdateBlend,parent),m_texture(nullptr)
 {
     qDebug()<<"construct ripple";
 
-    //this->setMouseTracking(true);
-    if(parent&&insfilter)
-    {
-        //parent->installEventFilter(this);
-    }
     m_texIndex=0;
-    m_radius=20;
-    m_strength=0.01;
     m_resolution=2.0;
     m_damping=0.995;
-    m_backgroundImg=":/img/bg3.jpg";
+    m_backgroundImg="";
+
+    HWND desk=FindDesktop::findDesk();
+    QWindow* p=QWindow::fromWinId(reinterpret_cast<WId>(desk));
+    this->setParent(p);
+    this->resize(p->size());
+
 }
 
 RippleWindow::~RippleWindow()
@@ -508,7 +529,8 @@ LRESULT CALLBACK RippleWindow::mouseProc(int Code, WPARAM wParam, LPARAM lParam)
             POINT p=mhookstruct->pt;
             if(RippleWindow::m_WinId)
             {
-                SendMessage(RippleWindow::m_WinId,WM_MOUSEMOVE,0,MAKEWPARAM(p.x,p.y));
+                m_instance->drop(p.x,p.y,20,0.01);
+                //SendMessage(RippleWindow::m_WinId,WM_MOUSEMOVE,0,MAKEWPARAM(p.x,p.y));
             }
         }
         if(wParam==WM_LBUTTONDOWN)
@@ -517,33 +539,36 @@ LRESULT CALLBACK RippleWindow::mouseProc(int Code, WPARAM wParam, LPARAM lParam)
             POINT p=mhookstruct->pt;
             if(RippleWindow::m_WinId)
             {
-                SendMessage(RippleWindow::m_WinId,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
+                m_instance->drop(p.x,p.y,30,0.14);
+                //SendMessage(RippleWindow::m_WinId,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
                 //SendMessage(RippleWindow::m_desktop,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
             }
             //qDebug()<<m_WinId;
             //qDebug()<<FindDesktop::findDesk();
         }
-        if(wParam==WM_LBUTTONUP)
-        {
-            //qDebug()<<"mouse lbutton down";
-            POINT p=mhookstruct->pt;
-            if(RippleWindow::m_WinId)
-            {
-                SendMessage(RippleWindow::m_WinId,WM_LBUTTONUP,0,MAKEWPARAM(p.x,p.y));
-            }
-        }
-        if(wParam==WM_RBUTTONDOWN)
-        {
-            //qDebug()<<"mouse lbutton down";
-            POINT p=mhookstruct->pt;
-            if(RippleWindow::m_WinId)
-            {
-                SendMessage(RippleWindow::m_WinId,WM_RBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
-                //SendMessage(RippleWindow::m_desktop,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
-            }
-            //qDebug()<<m_WinId;
-            //qDebug()<<FindDesktop::findDesk();
-        }
+        //if(wParam==WM_LBUTTONUP)
+        //{
+        //    //qDebug()<<"mouse lbutton down";
+        //    POINT p=mhookstruct->pt;
+        //    if(RippleWindow::m_WinId)
+        //    {
+        //        SendMessage(RippleWindow::m_WinId,WM_LBUTTONUP,0,MAKEWPARAM(p.x,p.y));
+        //
+        //    }
+        //}
+        //if(wParam==WM_RBUTTONDOWN)
+        //{
+        //    //qDebug()<<"mouse lbutton down";
+        //    POINT p=mhookstruct->pt;
+        //    if(RippleWindow::m_WinId)
+        //    {
+        //        //SendMessage(RippleWindow::m_WinId,WM_RBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
+        //        //SendMessage(RippleWindow::m_desktop,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
+        //        SendMessage(RippleWindow::m_workerw,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
+        //    }
+        //    //qDebug()<<m_WinId;
+        //    //qDebug()<<FindDesktop::findDesk();
+        //}
     }
     return CallNextHookEx(m_mousehook,Code,wParam,lParam);
     //return false;

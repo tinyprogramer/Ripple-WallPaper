@@ -21,7 +21,9 @@ class RippleWindow : public QOpenGLWindow,protected QOpenGLFunctions
     Q_OBJECT
 
 public:
-    RippleWindow(QWindow* parent=0,bool insfilter=true);
+
+    static RippleWindow* getInstance();
+    static void destroyRippleWindow();
     ~RippleWindow();
     void printcnt();
     void accEvent(QEvent* ev);
@@ -52,6 +54,7 @@ protected:
 
 
 private:
+    RippleWindow(QWindow* parent=0);
     QOpenGLShaderProgram *drop_program,*render_program,*update_program;
     QOpenGLVertexArrayObject m_globVAO;
 
@@ -59,12 +62,16 @@ private:
     QOpenGLBuffer m_globVBO;
     QOpenGLTexture* m_texture;
     int m_texIndex;
-    int m_radius;
-    GLfloat m_deltx,m_delty,m_strength,m_resolution,m_aspectratio,m_damping;
+    GLfloat m_deltx,m_delty,m_resolution,m_aspectratio,m_damping;
     QString m_backgroundImg;
 
     static HHOOK m_mousehook;
     static HWND m_WinId,m_workerw;
+
+    static int m_radius;
+    static GLfloat m_strength;
+
+    static RippleWindow* m_instance;
 
 };
 
