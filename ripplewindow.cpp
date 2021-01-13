@@ -1,12 +1,10 @@
-#include "ripplewindow.h"
-
 #include <QOpenGLShaderProgram>
-
-#include <QDebug>
 #include <QFile>
 #include <QFileInfo>
-#include <QTimer>
 #include <QWindow>
+#include <QDebug>
+
+#include "ripplewindow.h"
 
 HHOOK RippleWindow::m_mousehook=NULL;
 HWND RippleWindow::m_WinId=NULL;
@@ -124,8 +122,6 @@ void RippleWindow::destroyRippleWindow()
 RippleWindow::RippleWindow(QWindow* parent)
     :QOpenGLWindow(QOpenGLWindow::PartialUpdateBlend,parent),m_texture(nullptr)
 {
-    qDebug()<<"construct ripple";
-
     m_texIndex=0;
     m_resolution=2.0;
     m_damping=0.995;
@@ -140,7 +136,6 @@ RippleWindow::RippleWindow(QWindow* parent)
 
 RippleWindow::~RippleWindow()
 {
-    qDebug()<<"~ripple";
     this->unHook();
     makeCurrent();
     if(m_texture)
@@ -148,7 +143,7 @@ RippleWindow::~RippleWindow()
         m_texture->destroy();
         delete m_texture;
     }
-    qDebug()<<"ripplewindow destroying1";
+
     if(m_FrameBuffers.size()>0)
     {
         glDeleteFramebuffers(m_FrameBuffers.size(),m_FrameBuffers.data());
@@ -160,7 +155,7 @@ RippleWindow::~RippleWindow()
     m_globVAO.destroy();
     m_globVBO.destroy();
     doneCurrent();
-    qDebug()<<"ripplewindow destroyed";
+
 }
 
 void RippleWindow::swapFrameBuffer()
@@ -184,20 +179,17 @@ void RippleWindow::initializeGL()
     m_globVBO.allocate(vertArray,sizeof(vertArray));
 
     drop_program=new QOpenGLShaderProgram;
-    //initProgram(":/glob.vert",":/drop.frag",drop_program);
     initProgram(globVert,dropFrag,drop_program);
     drop_program->setAttributeBuffer("vertex",GL_FLOAT,0,2,2*sizeof(GL_FLOAT));
     drop_program->enableAttributeArray("vertex");
 
     render_program=new QOpenGLShaderProgram;
-    //initProgram(":/render.vert",":/render.frag",render_program);
     initProgram(renderVert,renderFrag,render_program);
     render_program->setAttributeBuffer("vertex",GL_FLOAT,0,2,2*sizeof(GL_FLOAT));
     render_program->enableAttributeArray("vertex");
 
 
     update_program=new QOpenGLShaderProgram;
-    //initProgram(":/glob.vert",":/update.frag",update_program);
     initProgram(globVert,updateFrag,update_program);
     update_program->setAttributeBuffer("vertex",GL_FLOAT,0,2,2*sizeof(GL_FLOAT));
     update_program->enableAttributeArray("vertex");
@@ -251,16 +243,6 @@ void RippleWindow::initializeGL()
     m_delty=m_resolution/this->height();
     m_aspectratio=(GLfloat)this->height()/(GLfloat)this->width();
 
-    //QTimer * t=new QTimer(this);
-    //t->setInterval(1000/60);
-    //QObject::connect(t,&QTimer::timeout,[this](){
-    //    POINT p;
-    //    GetCursorPos(&p);
-    //    SendMessage((HWND)this->winId(),WM_MOUSEMOVE,0,MAKEWPARAM(p.x,p.y));
-    //    //qDebug()<<p.x;
-    //   //drop(p.x,p.y,20,0.01);
-    //});
-    //t->start();
     this->setHook();
     m_WinId=(HWND)this->winId();
     m_workerw=FindDesktop::findWorkerW();
@@ -277,54 +259,7 @@ void RippleWindow::paintGL()
 
 void RippleWindow::resizeGL(int width, int height)
 {
-    //makeCurrent();
 
-// if(m_FrameBuffers.size()>0)
-// {
-//     glDeleteFramebuffers(m_FrameBuffers.size(),m_FrameBuffers.data());
-// }
-// if(m_Textures.size()>0)
-// {
-//     glDeleteTextures(m_Textures.size(),m_Textures.data());
-// }
-// m_FrameBuffers.clear();
-// m_Textures.clear();
-// unsigned int texture1,texture2,fb1,fb2;
-// glGenFramebuffers(1,&fb1);
-// glBindFramebuffer(GL_FRAMEBUFFER,fb1);
-// glGenTextures(1, &texture1);
-//
-// glBindTexture(GL_TEXTURE_2D, texture1);
-// glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-// glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-// glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-// glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-// glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F_ARB, this->width(),this->height(), 0, GL_RGBA, GL_FLOAT, NULL);
-//
-// glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1, 0);
-//
-// m_FrameBuffers.push_back(fb1);
-// m_Textures.push_back(texture1);
-//
-// glGenFramebuffers(1,&fb2);
-// glBindFramebuffer(GL_FRAMEBUFFER,fb2);
-// glGenTextures(1, &texture2);
-//
-// glBindTexture(GL_TEXTURE_2D, texture2);
-// glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
-// glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-// glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
-// glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
-// glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F_ARB, this->width(),this->height(), 0, GL_RGBA, GL_FLOAT, NULL);
-//
-// glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture2, 0);
-//
-// m_FrameBuffers.push_back(fb2);
-// m_Textures.push_back(texture2);
-//
-// m_deltx=m_resolution/this->width();
-// m_delty=m_resolution/this->height();
-// m_aspectratio=(GLfloat)this->height()/(GLfloat)this->width();
 }
 
 void RippleWindow::initProgram(QString vert,QString frag,QOpenGLShaderProgram* pro){
@@ -411,7 +346,6 @@ void RippleWindow::updateFrame()
 
     update_program->setUniformValue("delta",m_deltx,m_delty);
     update_program->setUniformValue("damping",m_damping);
-
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,m_Textures[m_texIndex]);
 
@@ -463,6 +397,8 @@ void RippleWindow::setResolution(GLfloat resolution)
     if(resolution>0)
     {
         m_resolution=resolution;
+        m_deltx=m_resolution/this->width();
+        m_delty=m_resolution/this->height();
     }
 }
 
@@ -493,23 +429,35 @@ void RippleWindow::setBackgroundImage(QString filename)
     }
 }
 
+int RippleWindow::getRadius()
+{
+    return m_radius;
+}
+
+GLfloat RippleWindow::getStrength()
+{
+    return m_strength;
+}
+
+GLfloat RippleWindow::getResolution()
+{
+    return m_resolution;
+}
+
+GLfloat RippleWindow::getDamping()
+{
+    return m_damping;
+}
+
+QString RippleWindow::getBackground()
+{
+    return m_backgroundImg;
+}
+
 void RippleWindow::accEvent(QEvent *ev)
 {
     this->event(ev);
 }
-
-//bool RippleWindow::eventFilter(QObject *watched, QEvent *event)
-//{
-//    if(event->type()==QEvent::MouseButtonPress||event->type()==QEvent::MouseMove)
-//    {
-//        this->event(event);
-//    }
-//    if(event->type()==QEvent::Resize)
-//    {
-//        this->resize(this->parent()->size());
-//    }
-//    return QOpenGLWindow::eventFilter(watched,event);
-//}
 
 LRESULT CALLBACK RippleWindow::mouseProc(int Code, WPARAM wParam, LPARAM lParam)
 {
@@ -517,61 +465,28 @@ LRESULT CALLBACK RippleWindow::mouseProc(int Code, WPARAM wParam, LPARAM lParam)
     {
         return CallNextHookEx(m_mousehook,Code,wParam,lParam);
     }
-    //qDebug()<<"mouseProc";
-    if(GetForegroundWindow()==m_workerw)
+    if(true||GetForegroundWindow()==m_workerw)
     {
-        //qDebug()<<"desktop";
         MOUSEHOOKSTRUCT *mhookstruct = (MOUSEHOOKSTRUCT*)lParam;
-        //
+
         if(wParam==WM_MOUSEMOVE)
         {
-            //qDebug()<<"mouse move";
             POINT p=mhookstruct->pt;
             if(RippleWindow::m_WinId)
             {
-                m_instance->drop(p.x,p.y,20,0.01);
-                //SendMessage(RippleWindow::m_WinId,WM_MOUSEMOVE,0,MAKEWPARAM(p.x,p.y));
+                m_instance->drop(p.x,p.y,RippleWindow::m_radius,RippleWindow::m_strength);
             }
         }
         if(wParam==WM_LBUTTONDOWN)
         {
-            //qDebug()<<"mouse lbutton down";
             POINT p=mhookstruct->pt;
             if(RippleWindow::m_WinId)
             {
-                m_instance->drop(p.x,p.y,30,0.14);
-                //SendMessage(RippleWindow::m_WinId,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
-                //SendMessage(RippleWindow::m_desktop,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
+                m_instance->drop(p.x,p.y,1.5*RippleWindow::m_radius,14*RippleWindow::m_strength);
             }
-            //qDebug()<<m_WinId;
-            //qDebug()<<FindDesktop::findDesk();
         }
-        //if(wParam==WM_LBUTTONUP)
-        //{
-        //    //qDebug()<<"mouse lbutton down";
-        //    POINT p=mhookstruct->pt;
-        //    if(RippleWindow::m_WinId)
-        //    {
-        //        SendMessage(RippleWindow::m_WinId,WM_LBUTTONUP,0,MAKEWPARAM(p.x,p.y));
-        //
-        //    }
-        //}
-        //if(wParam==WM_RBUTTONDOWN)
-        //{
-        //    //qDebug()<<"mouse lbutton down";
-        //    POINT p=mhookstruct->pt;
-        //    if(RippleWindow::m_WinId)
-        //    {
-        //        //SendMessage(RippleWindow::m_WinId,WM_RBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
-        //        //SendMessage(RippleWindow::m_desktop,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
-        //        SendMessage(RippleWindow::m_workerw,WM_LBUTTONDOWN,0,MAKEWPARAM(p.x,p.y));
-        //    }
-        //    //qDebug()<<m_WinId;
-        //    //qDebug()<<FindDesktop::findDesk();
-        //}
     }
     return CallNextHookEx(m_mousehook,Code,wParam,lParam);
-    //return false;
 
 }
 

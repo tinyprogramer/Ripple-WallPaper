@@ -27,13 +27,13 @@ LIBS += -luser32
 
 SOURCES += \
         main.cpp \
-        mainwindow.cpp \
-    ripplewindow.cpp
+    ripplewindow.cpp \
+    papermanager.cpp
 
 HEADERS += \
-        mainwindow.h \
     ripplewindow.h \
-    finddesktop.h
+    finddesktop.h \
+    papermanager.h
 
 FORMS += \
-        mainwindow.ui
+    papermanager.ui

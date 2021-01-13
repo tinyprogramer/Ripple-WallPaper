@@ -35,6 +35,12 @@ public:
     void setDamping(GLfloat damping);
     void setBackgroundImage(QString filename);
 
+    int getRadius();
+    GLfloat getStrength();
+    GLfloat getResolution();
+    GLfloat getDamping();
+    QString getBackground();
+
 protected:
     void initializeGL() override;
     void paintGL() override;
@@ -46,7 +52,6 @@ protected:
     void updateFrame();
     void initProgram(QString vert,QString frag,QOpenGLShaderProgram* pro);
     void initProgram(const char* vert,const char* frag,QOpenGLShaderProgram* pro);
-    //bool eventFilter(QObject *watched, QEvent *event);
 
     void setHook();
     void unHook();
