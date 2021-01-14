@@ -1,4 +1,4 @@
-#ifndef RIPPLEWINDOW_H
+﻿#ifndef RIPPLEWINDOW_H
 #define RIPPLEWINDOW_H
 
 #pragma execution_character_set("utf-8")
@@ -17,8 +17,8 @@
 
 #include "finddesktop.h"
 //此类用来编写openGL窗口，实现水波的绘制
-//QWidget和QWindow似乎不是一个层面的东西，二者也无法简单的互相转化，因为我们要跟windows窗口建立联系
-//使用继承自QWindow的类看起来能够获得更令人满意的行为
+//QWidget和QWindow似乎不是一个层面的东西，二者也无法简单的互相转化
+//因为我们要跟windows窗口建立联系,使用继承自QWindow的类看起来能够获得更令人满意的行为
 //得益于Qt对QOpenGLWidget和QOpenGLWindow的封装比较相似，我可以比较容易的把之前的代码改为window而使用
 class RippleWindow : public QOpenGLWindow,protected QOpenGLFunctions
 {

@@ -1,4 +1,4 @@
-#ifndef PAPERMANAGER_H
+﻿#ifndef PAPERMANAGER_H
 #define PAPERMANAGER_H
 
 #pragma execution_character_set("utf-8")
@@ -26,7 +26,7 @@ public:
     void settingApply();//主要是点击“应用”按钮时调用，用来改变ripplewindow的参数设置
 
 protected:
-    void closeEvent(QCloseEvent* ev) override;//忽略关闭时间并改为隐藏，否则关闭窗口会导致应用关闭
+    void closeEvent(QCloseEvent* ev) override;//忽略关闭事件并改为隐藏，否则关闭窗口会导致应用关闭
 
     void initSetting();//这里其实被我用来设置qslider的区间了
     bool loadSettingFromFile();//从json文件中获取设置，可以获得用户之前的设置

@@ -1,4 +1,4 @@
-#include <QOpenGLShaderProgram>
+﻿#include <QOpenGLShaderProgram>
 #include <QFile>
 #include <QFileInfo>
 #include <QWindow>
@@ -7,7 +7,8 @@
 #include "ripplewindow.h"
 
 //要对此类做修改可能需要一些openGL的基础知识
-//核心的算法主要是参考一份javascript的代码，我会注释一些我的理解
+//此类大量参考引用了一份javascript的代码，我会注释一些我的理解
+//参考项目地址https://github.com/sirxemic/jquery.ripples/
 //但你不能指望注释很详细，因为有些地方我也不太懂……
 HHOOK RippleWindow::m_mousehook=NULL;
 HWND RippleWindow::m_WinId=NULL;
@@ -99,13 +100,13 @@ static const char* dropFrag=//drop使用的片段着色器，对帧缓冲中的�
         "uniform vec2 center;\n"
         "uniform float radius;\n"
         "uniform float strength;\n"
-        "uniform float ratio;\n"
+        "uniform float ratio;\n"//传入的窗口长宽比
         "varying vec2 coord;\n"
         "void main() {\n"
         "	vec4 info = texture2D(texture, coord);\n"
         "	float x=center.x * 0.5 + 0.5 - coord.x;\n"
-        "	float y=(center.y * 0.5 + 0.5 - coord.y)*ratio;\n"
-        "	float drop = max(0.0, 1.0 - length(vec2(x,y)) / radius);\n"//以center为中心，radius为半径修改此范围内的水面高度
+        "	float y=(center.y * 0.5 + 0.5 - coord.y)*ratio;\n"//纹理坐标空间是正方形，实际上生成了一个椭圆的水波，缩放到屏幕上就会呈现圆形
+        "	float drop = max(0.0, 1.0 - length(vec2(x,y)) / radius);\n"//以center为中心，radius为半径修改此范围内的水面高度以使其成为波源
         "	drop = 0.5 - cos(drop * PI) * 0.5;\n"
         "	info.r += drop * strength;\n"
         "	gl_FragColor = info;\n"
@@ -259,13 +260,13 @@ void RippleWindow::initializeGL()//初始化openGL
     m_Textures.push_back(texture2);
 
     //openGL的纹理坐标空间是一个正方形，而我们的窗口很难保证是正方形
-    //这里通过在openGL程序中添加了几个变量和相应的计算进行了坐标转换
+    //这里通过向openGL程序中传入窗口长宽比并进行相应的计算进行了坐标转换
     //使得在非正方形的窗口中能够产生圆形的水波
     //参考的js代码使用的是另一种方式，他的方式会使得窗口为非正方形时，水波纹理的某两条边不在窗口范围内
     //也就导致水波无法在窗口边缘反弹，如果你观察够仔细，你可以发现那两条边并非不反弹水波，而是又经过了一段距离才反弹回来。
     m_deltx=m_resolution/this->width();
     m_delty=m_resolution/this->height();
-    m_aspectratio=(GLfloat)this->height()/(GLfloat)this->width();//实际就是窗口长宽比
+    m_aspectratio=(GLfloat)this->height()/(GLfloat)this->width();//窗口长宽比
 
     this->setHook();//设置鼠标钩子，获得桌面句柄
     m_WinId=(HWND)this->winId();
@@ -480,7 +481,7 @@ QString RippleWindow::getBackground()
     return m_backgroundImg;
 }
 
-void RippleWindow::accEvent(QEvent *ev)//此程序弃用
+void RippleWindow::accEvent(QEvent *ev)
 {
     this->event(ev);
 }
