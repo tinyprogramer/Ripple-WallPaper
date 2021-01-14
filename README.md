@@ -12,7 +12,7 @@ This program references a javascript code,you can even use it with QWebEngine in
 
 使用了UTF-8-BOM编码保存了代码文件，如果编译不过或者出现乱码可以看看是否为编码问题
 
-你也可以直接下载已经编译打包好的程序。
+你也可以在发布页面直接下载已经编译打包好的程序（约16M）。
 [下载地址](https://github.com/tinyprogramer/Ripple-WallPaper/releases/tag/beta)
 
 
