@@ -14,10 +14,16 @@ PaperManager::PaperManager(QWidget *parent) :
     ui(new Ui::PaperManager)
 {
     ui->setupUi(this);
-    this->setAttribute(Qt::WA_DeleteOnClose);
+    this->setAttribute(Qt::WA_DeleteOnClose);//设置关闭后删除
+    this->setWindowFlags(windowFlags() & ~Qt::WindowContextHelpButtonHint);//去掉右上角问号按钮
 
     this->initSetting();
 
+    //把buttonBox中的文字改为中文
+    ui->buttonBox->button(QDialogButtonBox::Ok)->setText(QString::fromWCharArray(L"确定"));
+    ui->buttonBox->button(QDialogButtonBox::Cancel)->setText(QString::fromWCharArray(L"取消"));
+    ui->buttonBox->button(QDialogButtonBox::Apply)->setText(QString::fromWCharArray(L"应用"));
+    ui->buttonBox->button(QDialogButtonBox::RestoreDefaults)->setText(QString::fromWCharArray(L"恢复默认"));
     QObject::connect(ui->buttonBox,&QDialogButtonBox::clicked,this,&PaperManager::onButtonBoxClicked);
     QObject::connect(ui->buttonBox,&QDialogButtonBox::accepted,[this](){
         this->settingApply();
@@ -26,17 +32,20 @@ PaperManager::PaperManager(QWidget *parent) :
     QObject::connect(ui->FileChooseButton,&QPushButton::clicked,this,&PaperManager::backgroundFileChoose);
 
     this->createTrayIcon();
-    m_trayIcon->setIcon(QIcon("E:/qtproject/systray/images/bad.png"));
-    m_trayIcon->show();
-    m_ripplewindow=RippleWindow::getInstance();
+    m_trayIcon->setIcon(QIcon(":/icon/settings.png"));
+    m_trayIcon->show();//设置托盘图标并显示
 
-    if(!this->loadSettingFromFile())
+    m_ripplewindow=RippleWindow::getInstance();//获取单例实例
+
+    if(!this->loadSettingFromFile())//从json文件获取设置，如失败则使用默认设置
     {
         this->setDefault();
     }
     this->settingApply();
 
     m_ripplewindow->show();
+    m_trayIcon->showMessage(QString::fromWCharArray(L"壁纸"),QString::fromWCharArray(L"壁纸已启动，可在此更改设置"));
+    //壁纸窗口已生成，托盘弹出消息提示
 
 }
 
@@ -70,7 +79,7 @@ bool PaperManager::loadSettingFromFile()
 
     QByteArray saveData = loadFile.readAll();
 
-    QJsonDocument loadDoc(QJsonDocument::fromBinaryData(saveData));
+    QJsonDocument loadDoc(QJsonDocument::fromBinaryData(saveData));//这里使用二进制的方式读取和保存json文件
     QJsonObject data=loadDoc.object();
 
     if(!(data.contains("Radius")&&data["Radius"].isDouble()&&
@@ -113,7 +122,8 @@ void PaperManager::saveSetting()
     saveFile.write(saveDoc.toBinaryData());
 
 }
-
+//有关参数设置的几个函数并没有很好的抽象出逻辑，如果你想修改参数区间，可能要同时修改
+//initSetting(),getCurSetting(),settingApply()函数来使参数能够正确的转换
 void PaperManager::getCurSetting()
 {
     if(!m_ripplewindow)
@@ -159,9 +169,9 @@ void PaperManager::backgroundFileChoose()
     });
     fdp->setAttribute(Qt::WA_DeleteOnClose);
     fdp->setWindowModality(Qt::ApplicationModal);
-    fdp->setOption(QFileDialog::DontResolveSymlinks);
-    fdp->setNameFilter("Images (*.jpg *.png *.bmp *.jpeg)");
-    if(m_ripplewindow)
+    fdp->setOption(QFileDialog::DontResolveSymlinks);//不解决符号链接，否则选择某些文件会导致程序卡死
+    fdp->setNameFilter("Images (*.jpg *.png *.bmp *.jpeg)");//加了过滤器依然有一些链接文件会出现在窗口中
+    if(m_ripplewindow)//如果此时在使用有效的背景图片，就尝试将初始目录设置为此图片所在的目录
     {
         const QString& bak=m_ripplewindow->getBackground();
         if(QFile::exists(bak))
@@ -176,7 +186,7 @@ void PaperManager::backgroundFileChoose()
 void PaperManager::closeEvent(QCloseEvent *ev)
 {
     this->hide();
-    ev->ignore();
+    ev->ignore();//忽略关闭事件改为隐藏窗口
 }
 
 void PaperManager::createTrayIcon()
@@ -192,24 +202,27 @@ void PaperManager::createTrayIcon()
 
     m_trayIcon = new QSystemTrayIcon(this);
     m_trayIcon->setContextMenu(m_trayIconMenu);
+
 }
 
 void PaperManager::onSettingActionTriggered()
 {
-    this->getCurSetting();
-    this->show();
+    this->getCurSetting();//显示窗口前将滑块置于正确位置，用户上次可能点了取消
+    this->show();//这样每次打开设置窗口时，滑块都能正确的表示当前的参数设置
 }
 
 void PaperManager::onExit()
 {
-    m_trayIcon->hide();
+    //尽管需要回收的项目不多，直接调用qApp->quit()可以退出程序
+    //但是还是尝试手动回收一下，直接quit()并不会调用此类的析构函数，错误的回收可能会导致程序无法正确退出
+    m_trayIcon->hide();//这里不隐藏的话，程序关闭后托盘图标会一直存在直到鼠标移向它，影响体验
     this->hide();
     if(m_ripplewindow)
     {
         m_ripplewindow->destroyRippleWindow();
     }
 
-    this->reject();
+    this->reject();//reject会令窗口关闭而不是隐藏
 }
 
 void PaperManager::onButtonBoxClicked(QAbstractButton* button)

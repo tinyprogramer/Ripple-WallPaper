@@ -8,6 +8,7 @@ QT       += core gui
 
 greaterThan(QT_MAJOR_VERSION, 4): QT += widgets
 
+
 TARGET = RippleWallPaper
 TEMPLATE = app
 
@@ -37,3 +38,8 @@ HEADERS += \
 
 FORMS += \
     papermanager.ui
+
+RESOURCES += \
+    resource.qrc
+
+RC_ICONS = icon/ripplePaper.ico

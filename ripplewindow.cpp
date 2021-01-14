@@ -6,6 +6,9 @@
 
 #include "ripplewindow.h"
 
+//要对此类做修改可能需要一些openGL的基础知识
+//核心的算法主要是参考一份javascript的代码，我会注释一些我的理解
+//但你不能指望注释很详细，因为有些地方我也不太懂……
 HHOOK RippleWindow::m_mousehook=NULL;
 HWND RippleWindow::m_WinId=NULL;
 HWND RippleWindow::m_workerw=NULL;
@@ -13,6 +16,7 @@ RippleWindow* RippleWindow::m_instance=nullptr;
 int RippleWindow::m_radius=20;
 GLfloat RippleWindow::m_strength=0.01;
 
+//openGL所需顶点数据，本程序只需一个正方形的顶点
 static GLfloat vertArray[]={
     -1.0,1.0,
     -1.0,-1.0,
@@ -22,45 +26,51 @@ static GLfloat vertArray[]={
     1.0,-1.0
 };
 
-static const char* globVert=
+//本程序共包含drop_program,update_program,render_program三个openGL程序
+//他们使用的着色器如下
+
+static const char* globVert=//drop,update使用的顶点着色器
         "attribute vec2 vertex;\n"
         "varying vec2 coord;\n"
         "void main() {\n"
-        "	coord = vertex * 0.5 + 0.5;\n"
+        "	coord = vertex * 0.5 + 0.5;\n"//这里是把(-1.0,1.0)的坐标转换为(0.0,1.0)以便应用于纹理
         "	gl_Position = vec4(vertex, 0.0, 1.0);\n"
         "}\n";
 
-static const char* renderVert=
+static const char* renderVert=//render使用的顶点着色器
         "precision highp float;\n"
         "attribute vec2 vertex;\n"
         "varying vec2 ripplesCoord;\n"
         "varying vec2 backgroundCoord;\n"
-        "void main() {\n"
+        "void main() {\n"//水波绘制可以看做我们都是在对纹理进行操作，所以基本都要转换成纹理坐标(0.0,1.0)区间
         "	backgroundCoord=vertex*0.5+0.5;\n"
         "	ripplesCoord=backgroundCoord;\n"
         "	gl_Position = vec4(vertex.x, vertex.y, 0.0, 1.0);\n"
         "}\n";
 
-static const char* renderFrag=
+static const char* renderFrag=//render使用的片段着色器，水波算法的核心部分
         "precision highp float;\n"
-        "uniform sampler2D samplerBackground;\n"
-        "uniform sampler2D samplerRipples;\n"
-        "uniform vec2 delta;\n"
-        "uniform float perturbance;\n"
+        "uniform sampler2D samplerBackground;\n"//背景图片纹理
+        "uniform sampler2D samplerRipples;\n"//帧缓冲中的水波纹理，实际上保存的数据可以看做是水面的高度
+        "uniform vec2 delta;\n"//水波精细度参数影响此变量，可以理解成采样点之间的距离
+        "uniform float perturbance;\n"//似乎是折射率，我的程序没提供对此参数的修改方法
         "varying vec2 ripplesCoord;\n"
         "varying vec2 backgroundCoord;\n"
         "void main() {\n"
-        "	float height = texture2D(samplerRipples, ripplesCoord).r;\n"
-        "	float heightX = texture2D(samplerRipples, vec2(ripplesCoord.x + delta.x, ripplesCoord.y)).r;\n"
-        "	float heightY = texture2D(samplerRipples, vec2(ripplesCoord.x, ripplesCoord.y + delta.y)).r;\n"
+        "	float height = texture2D(samplerRipples, ripplesCoord).r;\n"//纹理中的r分量保存了第一帧中的水面高度
+        "	float heightX = texture2D(samplerRipples, vec2(ripplesCoord.x + delta.x, ripplesCoord.y)).r;\n"//x轴方向相邻采样点的水面高度
+        "	float heightY = texture2D(samplerRipples, vec2(ripplesCoord.x, ripplesCoord.y + delta.y)).r;\n"//y轴方向
         "	vec3 dx = vec3(delta.x, heightX - height, 0.0);\n"
-        "	vec3 dy = vec3(0.0, heightY - height, delta.y);\n"
-        "	vec2 offset = -normalize(cross(dy, dx)).xz;\n"
+        "	vec3 dy = vec3(0.0, heightY - height, delta.y);\n"//以上部分你可以试着从求导数所需参数的角度理解
+        "	vec2 offset = -normalize(cross(dy, dx)).xz;\n"//求出水面法线向量，并计算视线坐标(x,y)会折射到背景图片的哪个坐标(x',y')
         "	float specular = pow(max(0.0, dot(offset, normalize(vec2(-0.6, 1.0)))), 4.0);\n"
         "	gl_FragColor = texture2D(samplerBackground, backgroundCoord + offset * perturbance) + specular;\n"
-        "}\n";
+        "}\n";//最后将背景图片(x',y')处的色块渲染到(x,y)处以实现折射效果
 
-static const char* updateFrag=
+
+//https://web.archive.org/web/20160116150939/http://freespace.virgin.net/hugo.elias/graphics/x_water.htm
+//这里对此算法做了一定的解释，能不能看懂就看造化了……
+static const char* updateFrag=//update使用的片段着色器，水波算法核心部分，不关注波源点及波源数量，以帧为单位同时更新整个水面的高度
         "precision highp float;\n"
         "uniform sampler2D texture;\n"
         "uniform vec2 delta;\n"
@@ -82,7 +92,7 @@ static const char* updateFrag=
         "	gl_FragColor = info;\n"
         "}\n";
 
-static const char* dropFrag=
+static const char* dropFrag=//drop使用的片段着色器，对帧缓冲中的数据进行操作，用来生成波源
         "precision highp float;\n"
         "const float PI = 3.141592653589793;\n"
         "uniform sampler2D texture;\n"
@@ -95,7 +105,7 @@ static const char* dropFrag=
         "	vec4 info = texture2D(texture, coord);\n"
         "	float x=center.x * 0.5 + 0.5 - coord.x;\n"
         "	float y=(center.y * 0.5 + 0.5 - coord.y)*ratio;\n"
-        "	float drop = max(0.0, 1.0 - length(vec2(x,y)) / radius);\n"
+        "	float drop = max(0.0, 1.0 - length(vec2(x,y)) / radius);\n"//以center为中心，radius为半径修改此范围内的水面高度
         "	drop = 0.5 - cos(drop * PI) * 0.5;\n"
         "	info.r += drop * strength;\n"
         "	gl_FragColor = info;\n"
@@ -127,14 +137,22 @@ RippleWindow::RippleWindow(QWindow* parent)
     m_damping=0.995;
     m_backgroundImg="";
 
-    HWND desk=FindDesktop::findDesk();
-    QWindow* p=QWindow::fromWinId(reinterpret_cast<WId>(desk));
-    this->setParent(p);
+    //下面的代码用来把窗口嵌入桌面，网上比较容易查到的方法通常使用SetParent的WinApi
+    //但是据我测试SetParent这一句是无效的，即使使用继承自QWindow的类。
+    //使用SetParent的代码所实现的在桌面绘制效果，依靠的是showFullscreen这个操作
+    //这种操作会使程序打开时先产生一个全屏的窗口，但是你显示桌面时又发现此时在桌面的确渲染了此窗口
+    //怎么说呢，至少在较大程度上确实满足了在桌面渲染窗口的需求
+
+    //对于将qt窗口嵌入系统窗口，或是将系统窗口嵌入qt窗口，文档中都介绍了相应的操作，以下的代码产生的行为我认为是比较令人满意的
+
+    HWND desk=FindDesktop::findDesk();//获得窗口句柄
+    QWindow* p=QWindow::fromWinId(reinterpret_cast<WId>(desk));//以指定HWND创建窗口的静态函数
+    this->setParent(p);//将其设置为我们想嵌入的窗口的父亲
     this->resize(p->size());
 
 }
 
-RippleWindow::~RippleWindow()
+RippleWindow::~RippleWindow()//qt文档强调了对于你自己创建的openGL相关资源，qt的回收机制无法保证正确进行回收
 {
     this->unHook();
     makeCurrent();
@@ -158,38 +176,38 @@ RippleWindow::~RippleWindow()
 
 }
 
-void RippleWindow::swapFrameBuffer()
+void RippleWindow::swapFrameBuffer()//交换当前所使用的帧缓冲
 {
     m_texIndex=1-m_texIndex;
 }
 
-void RippleWindow::initializeGL()
+void RippleWindow::initializeGL()//初始化openGL
 {
 
     initializeOpenGLFunctions();
 
     glClearColor(0.0f,0.0f,0.0f,0.0f);
 
-    m_globVAO.create();
+    m_globVAO.create();//创建VAO,VBO
     m_globVAO.bind();
 
     m_globVBO.create();
     m_globVBO.bind();
 
-    m_globVBO.allocate(vertArray,sizeof(vertArray));
+    m_globVBO.allocate(vertArray,sizeof(vertArray));//将顶点数据传入VBO,VAO
 
-    drop_program=new QOpenGLShaderProgram;
+    drop_program=new QOpenGLShaderProgram;//绑定drop程序并传入顶点数据
     initProgram(globVert,dropFrag,drop_program);
     drop_program->setAttributeBuffer("vertex",GL_FLOAT,0,2,2*sizeof(GL_FLOAT));
     drop_program->enableAttributeArray("vertex");
 
-    render_program=new QOpenGLShaderProgram;
+    render_program=new QOpenGLShaderProgram;//绑定render
     initProgram(renderVert,renderFrag,render_program);
     render_program->setAttributeBuffer("vertex",GL_FLOAT,0,2,2*sizeof(GL_FLOAT));
     render_program->enableAttributeArray("vertex");
 
 
-    update_program=new QOpenGLShaderProgram;
+    update_program=new QOpenGLShaderProgram;//绑定update
     initProgram(globVert,updateFrag,update_program);
     update_program->setAttributeBuffer("vertex",GL_FLOAT,0,2,2*sizeof(GL_FLOAT));
     update_program->enableAttributeArray("vertex");
@@ -197,7 +215,7 @@ void RippleWindow::initializeGL()
     m_globVAO.release();
     m_globVBO.release();
 
-    if(QFile::exists(m_backgroundImg))
+    if(QFile::exists(m_backgroundImg))//创建背景图片纹理,如果文件不存在则创建一个空的纹理
     {
         m_texture=new QOpenGLTexture(QImage(m_backgroundImg).mirrored());
     }else{
@@ -205,24 +223,26 @@ void RippleWindow::initializeGL()
     }
     m_texture->setMagnificationFilter(QOpenGLTexture::Linear);
 
-    unsigned int texture1,texture2,fb1,fb2;
+    unsigned int texture1,texture2,fb1,fb2;//这里创建了两个帧缓冲及他们所使用的纹理，注意这是两个额外的纹理，上方的m_texture用来储存真正的背景图片
+    //这里的两个纹理是我们通过帧缓冲，利用纹理这种结构保存我们所需的水面高度数据
     glGenFramebuffers(1,&fb1);
     glBindFramebuffer(GL_FRAMEBUFFER,fb1);
     glGenTextures(1, &texture1);
 
     glBindTexture(GL_TEXTURE_2D, texture1);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);//线性采样理论上是抗锯齿的一种手段，效果好一些
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);//这里的设置可以令水波达到边缘时产生反弹的效果
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F_ARB, this->width(),this->height(), 0, GL_RGBA, GL_FLOAT, NULL);
+    //上面这一句其实挺关键的，也给我造成了不小的麻烦，但是比较难解释，总之这里在设置纹理的数据格式和大小，错误的参数会使水波效果变得很奇怪甚至没有效果
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1, 0);
 
     m_FrameBuffers.push_back(fb1);
     m_Textures.push_back(texture1);
 
-    glGenFramebuffers(1,&fb2);
+    glGenFramebuffers(1,&fb2);//设置第二个帧缓冲及其纹理，几乎完全同上
     glBindFramebuffer(GL_FRAMEBUFFER,fb2);
     glGenTextures(1, &texture2);
 
@@ -238,12 +258,16 @@ void RippleWindow::initializeGL()
     m_FrameBuffers.push_back(fb2);
     m_Textures.push_back(texture2);
 
-
+    //openGL的纹理坐标空间是一个正方形，而我们的窗口很难保证是正方形
+    //这里通过在openGL程序中添加了几个变量和相应的计算进行了坐标转换
+    //使得在非正方形的窗口中能够产生圆形的水波
+    //参考的js代码使用的是另一种方式，他的方式会使得窗口为非正方形时，水波纹理的某两条边不在窗口范围内
+    //也就导致水波无法在窗口边缘反弹，如果你观察够仔细，你可以发现那两条边并非不反弹水波，而是又经过了一段距离才反弹回来。
     m_deltx=m_resolution/this->width();
     m_delty=m_resolution/this->height();
-    m_aspectratio=(GLfloat)this->height()/(GLfloat)this->width();
+    m_aspectratio=(GLfloat)this->height()/(GLfloat)this->width();//实际就是窗口长宽比
 
-    this->setHook();
+    this->setHook();//设置鼠标钩子，获得桌面句柄
     m_WinId=(HWND)this->winId();
     m_workerw=FindDesktop::findWorkerW();
 
@@ -256,13 +280,14 @@ void RippleWindow::paintGL()
 
     update();
 }
-
+//与QOpenGLWidget的较大不同在这里，qt文档中说此函数中不推荐使用openGL的功能，如果一定要使用，需要先makeCurrent()获得上下文
+//而我编码过程中因为这一块产生了若干问题，最后只好都删掉了，因为桌面窗口基本不需要改变大小，对于本程序倒是没什么影响
 void RippleWindow::resizeGL(int width, int height)
 {
 
 }
 
-void RippleWindow::initProgram(QString vert,QString frag,QOpenGLShaderProgram* pro){
+void RippleWindow::initProgram(QString vert,QString frag,QOpenGLShaderProgram* pro){//从文件中加载openGL的着色器程序
     if(!pro->addShaderFromSourceFile(QOpenGLShader::Vertex,vert))
     {
         qDebug()<< vert<<(pro->log());
@@ -280,7 +305,7 @@ void RippleWindow::initProgram(QString vert,QString frag,QOpenGLShaderProgram* p
     }
 }
 
-void RippleWindow::initProgram(const char *vert, const char *frag, QOpenGLShaderProgram *pro)
+void RippleWindow::initProgram(const char *vert, const char *frag, QOpenGLShaderProgram *pro)//从字符串加载
 {
     if(!pro->addShaderFromSourceCode(QOpenGLShader::Vertex,vert))
     {
@@ -317,13 +342,13 @@ void RippleWindow::drop(int x,int y,int radius,float strength)
 
     glBindFramebuffer(GL_FRAMEBUFFER,m_FrameBuffers[1-m_texIndex]);
     m_globVAO.bind();
-    float px=(float)(2*x-this->width())/this->width(),py=-(float)(2*y-this->height())/this->height();
+    float px=(float)(2*x-this->width())/this->width(),py=-(float)(2*y-this->height())/this->height();//把屏幕坐标转换到(-1.0,1.0)的正方形空间内
     float ra=(float)radius/this->width();
 
     drop_program->setUniformValue("center",px,py);
     drop_program->setUniformValue("radius",ra);
     drop_program->setUniformValue("strength",strength);
-    drop_program->setUniformValue("ratio",m_aspectratio);
+    drop_program->setUniformValue("ratio",m_aspectratio);//在此把窗口长宽比传入顶点着色器
 
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D,m_Textures[m_texIndex]);
@@ -336,7 +361,8 @@ void RippleWindow::drop(int x,int y,int radius,float strength)
 
 }
 
-void RippleWindow::updateFrame()
+void RippleWindow::updateFrame()//有关swapFramBuffer和updateFrame都是根据核心算法的原理做的一个实现
+//然而核心算法不太懂，基本是照葫芦画瓢写的
 {
     makeCurrent();
 
@@ -363,16 +389,16 @@ void RippleWindow::render()
     render_program->bind();
     render_program->setUniformValue("samplerBackground",0);
     render_program->setUniformValue("samplerRipples",1);
-    render_program->setUniformValue("perturbance",(GLfloat)0.04);
+    render_program->setUniformValue("perturbance",(GLfloat)0.04);//这里也是一个会影响水波效果的参数，不过我没提供修改的方法
     render_program->setUniformValue("delta",m_deltx,m_delty);
 
     m_globVAO.bind();
 
     glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D,m_Textures[m_texIndex]);
+    glBindTexture(GL_TEXTURE_2D,m_Textures[m_texIndex]);//这里传入水波高度纹理
 
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D,m_texture->textureId());
+    glBindTexture(GL_TEXTURE_2D,m_texture->textureId());//这里传入背景图片纹理
 
     glDrawArrays(GL_TRIANGLES,0,6);
     render_program->release();
@@ -454,7 +480,7 @@ QString RippleWindow::getBackground()
     return m_backgroundImg;
 }
 
-void RippleWindow::accEvent(QEvent *ev)
+void RippleWindow::accEvent(QEvent *ev)//此程序弃用
 {
     this->event(ev);
 }
@@ -465,14 +491,18 @@ LRESULT CALLBACK RippleWindow::mouseProc(int Code, WPARAM wParam, LPARAM lParam)
     {
         return CallNextHookEx(m_mousehook,Code,wParam,lParam);
     }
-    if(true||GetForegroundWindow()==m_workerw)
+    if(true||GetForegroundWindow()==m_workerw)//如果使用||后面的判断条件，会使仅当桌面获得焦点时才生成新的波源
+        //但是实际上占用资源的是水波效果的更新，只要水波效果还在update，性能消耗就差不多，索性就直接true了
+        //一种可行的优化是桌面被完全挡住时停止update，以后大概可能也许会改吧
     {
         MOUSEHOOKSTRUCT *mhookstruct = (MOUSEHOOKSTRUCT*)lParam;
 
         if(wParam==WM_MOUSEMOVE)
         {
             POINT p=mhookstruct->pt;
-            if(RippleWindow::m_WinId)
+            if(RippleWindow::m_WinId)//这里我试过使用WinAPI，SendMessage到桌面窗口，可以正确的收到鼠标事件并产生水波
+                //但是windows的鼠标消息就被程序拦截掉了，会导致其他窗口无法对鼠标事件作出响应
+                //如果你知道如何让qt程序响应windows消息后继续传递该消息，那么SendMessage的方法也是可行的
             {
                 m_instance->drop(p.x,p.y,RippleWindow::m_radius,RippleWindow::m_strength);
             }
