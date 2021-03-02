@@ -9,7 +9,11 @@
 //要对此类做修改可能需要一些openGL的基础知识
 //此类大量参考引用了一份javascript的代码，我会注释一些我的理解
 //参考项目地址https://github.com/sirxemic/jquery.ripples/
-//但你不能指望注释很详细，因为有些地方我也不太懂……
+//经过查阅资料和推导，应该可以确定update_program使用的算法是基于波动方程的
+//你可以在 https://blog.csdn.net/qq_41961619/article/details/114074630 查看详细解释
+//着色器中的"precision highp float;\n"应该是从GLSL 1.3才开始支持
+//较低的openGL版本可能会在运行时出现着色器链接错误
+
 HHOOK RippleWindow::m_mousehook=NULL;
 HWND RippleWindow::m_WinId=NULL;
 HWND RippleWindow::m_workerw=NULL;
@@ -54,24 +58,23 @@ static const char* renderFrag=//render使用的片段着色器，水波算法的
         "uniform sampler2D samplerBackground;\n"//背景图片纹理
         "uniform sampler2D samplerRipples;\n"//帧缓冲中的水波纹理，实际上保存的数据可以看做是水面的高度
         "uniform vec2 delta;\n"//水波精细度参数影响此变量，可以理解成采样点之间的距离
-        "uniform float perturbance;\n"//似乎是折射率，我的程序没提供对此参数的修改方法
+        "uniform float perturbance;\n"//这个参数可以理解成水面的平均高度
         "varying vec2 ripplesCoord;\n"
         "varying vec2 backgroundCoord;\n"
         "void main() {\n"
-        "	float height = texture2D(samplerRipples, ripplesCoord).r;\n"//纹理中的r分量保存了第一帧中的水面高度
+        "	float height = texture2D(samplerRipples, ripplesCoord).r;\n"//纹理中的r分量保存了水面高度
         "	float heightX = texture2D(samplerRipples, vec2(ripplesCoord.x + delta.x, ripplesCoord.y)).r;\n"//x轴方向相邻采样点的水面高度
         "	float heightY = texture2D(samplerRipples, vec2(ripplesCoord.x, ripplesCoord.y + delta.y)).r;\n"//y轴方向
         "	vec3 dx = vec3(delta.x, heightX - height, 0.0);\n"
         "	vec3 dy = vec3(0.0, heightY - height, delta.y);\n"//以上部分你可以试着从求导数所需参数的角度理解
-        "	vec2 offset = -normalize(cross(dy, dx)).xz;\n"//求出水面法线向量，并计算视线坐标(x,y)会折射到背景图片的哪个坐标(x',y')
-        "	float specular = pow(max(0.0, dot(offset, normalize(vec2(-0.6, 1.0)))), 4.0);\n"
+        "	vec2 offset = -normalize(cross(dy, dx)).xz;\n"//求出水面法线向量，并算出光线在XoY平面内的近似偏移量offset，这里认为光线经过水面后直接折射到法线方向
+        "	float specular = pow(max(0.0, dot(offset, normalize(vec2(-0.6, 1.0)))), 4.0);\n"//光的反射，形成水波上的白色高亮
         "	gl_FragColor = texture2D(samplerBackground, backgroundCoord + offset * perturbance) + specular;\n"
         "}\n";//最后将背景图片(x',y')处的色块渲染到(x,y)处以实现折射效果
 
 
-//https://web.archive.org/web/20160116150939/http://freespace.virgin.net/hugo.elias/graphics/x_water.htm
-//这里对此算法做了一定的解释，能不能看懂就看造化了……
-static const char* updateFrag=//update使用的片段着色器，水波算法核心部分，不关注波源点及波源数量，以帧为单位同时更新整个水面的高度
+
+static const char* updateFrag=//update使用的片段着色器，水波算法核心部分，基于波动方程，不关注波源点及波源数量，以帧为单位同时更新整个水面的高度
         "precision highp float;\n"
         "uniform sampler2D texture;\n"
         "uniform vec2 delta;\n"
@@ -87,9 +90,9 @@ static const char* updateFrag=//update使用的片段着色器，水波算法核
         "		texture2D(texture, coord + dx).r +\n"
         "		texture2D(texture, coord + dy).r\n"
         "	) * 0.25;\n"
-        "	info.g += (average - info.r) * 2.0;\n"
-        "	info.g *= damping;\n"
-        "	info.r += info.g;\n"
+        "	info.g += (average - info.r) * 2.0;\n"//g分量存储水面在垂直方向的速度，这里计算出了下一帧的速度
+        "	info.g *= damping;\n"//乘以衰减值使水波逐渐减弱
+        "	info.r += info.g;\n"//r分量存储水面高度，由公式 路程=速度*时间，这里是算出了下一帧的水面高度
         "	gl_FragColor = info;\n"
         "}\n";
 
@@ -179,7 +182,7 @@ RippleWindow::~RippleWindow()//qt文档强调了对于你自己创建的openGL�
 
 void RippleWindow::swapFrameBuffer()//交换当前所使用的帧缓冲
 {
-    m_texIndex=1-m_texIndex;
+    m_texIndex=1-m_texIndex;//实际上只交换了序号
 }
 
 void RippleWindow::initializeGL()//初始化openGL
@@ -224,19 +227,19 @@ void RippleWindow::initializeGL()//初始化openGL
     }
     m_texture->setMagnificationFilter(QOpenGLTexture::Linear);
 
-    unsigned int texture1,texture2,fb1,fb2;//这里创建了两个帧缓冲及他们所使用的纹理，注意这是两个额外的纹理，上方的m_texture用来储存真正的背景图片
+    unsigned int texture1,texture2,fb1,fb2;//这里创建了两个帧缓冲及他们所使用的纹理附件，注意这是两个额外的纹理，上方的m_texture用来储存真正的背景图片
     //这里的两个纹理是我们通过帧缓冲，利用纹理这种结构保存我们所需的水面高度数据
     glGenFramebuffers(1,&fb1);
     glBindFramebuffer(GL_FRAMEBUFFER,fb1);
     glGenTextures(1, &texture1);
 
     glBindTexture(GL_TEXTURE_2D, texture1);
-    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);//线性采样理论上是抗锯齿的一种手段，效果好一些
+    glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MIN_FILTER,GL_LINEAR);//线性采样理论上是抗锯齿的一种手段，效果好一些，但改成GL_NEAREST似乎也看不出什么区别……
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_MAG_FILTER,GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_S,GL_CLAMP_TO_EDGE);//这里的设置可以令水波达到边缘时产生反弹的效果
     glTexParameteri(GL_TEXTURE_2D,GL_TEXTURE_WRAP_T,GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F_ARB, this->width(),this->height(), 0, GL_RGBA, GL_FLOAT, NULL);
-    //上面这一句其实挺关键的，也给我造成了不小的麻烦，但是比较难解释，总之这里在设置纹理的数据格式和大小，错误的参数会使水波效果变得很奇怪甚至没有效果
+    //我们想在帧缓冲的纹理附件内保存水面高度，要注意纹理的数据类型要使用GL_FLOAT，而非作为纹理图片时常用的整型颜色值
 
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, texture1, 0);
 
@@ -335,7 +338,7 @@ void RippleWindow::mousePressEvent(QMouseEvent *ev)
     this->drop(ev->x(),ev->y(),1.5*m_radius,14*m_strength);
 }
 
-void RippleWindow::drop(int x,int y,int radius,float strength)
+void RippleWindow::drop(int x,int y,int radius,float strength)//使用drop_program进行绘制，会在framebuffer中添加一个水波
 {
 
     makeCurrent();
@@ -362,8 +365,7 @@ void RippleWindow::drop(int x,int y,int radius,float strength)
 
 }
 
-void RippleWindow::updateFrame()//有关swapFramBuffer和updateFrame都是根据核心算法的原理做的一个实现
-//然而核心算法不太懂，基本是照葫芦画瓢写的
+void RippleWindow::updateFrame()//使用update_program绘制，更新framebuffer中的水面高度
 {
     makeCurrent();
 
@@ -383,10 +385,10 @@ void RippleWindow::updateFrame()//有关swapFramBuffer和updateFrame都是根据
     this->swapFrameBuffer();
 }
 
-void RippleWindow::render()
+void RippleWindow::render()//使用render_program进行绘制，计算最终效果并渲染至屏幕
 {
 
-    glBindFramebuffer(GL_FRAMEBUFFER,defaultFramebufferObject());
+    glBindFramebuffer(GL_FRAMEBUFFER,defaultFramebufferObject());//Qt中要使用这种方式重新绑定默认帧缓冲
     render_program->bind();
     render_program->setUniformValue("samplerBackground",0);
     render_program->setUniformValue("samplerRipples",1);
