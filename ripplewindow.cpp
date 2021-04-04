@@ -43,7 +43,7 @@ static const char* globVert=//drop,update使用的顶点着色器
         "}\n";
 
 static const char* renderVert=//render使用的顶点着色器
-        "precision highp float;\n"
+//        "precision highp float;\n"
         "attribute vec2 vertex;\n"
         "varying vec2 ripplesCoord;\n"
         "varying vec2 backgroundCoord;\n"
@@ -54,7 +54,7 @@ static const char* renderVert=//render使用的顶点着色器
         "}\n";
 
 static const char* renderFrag=//render使用的片段着色器，水波算法的核心部分
-        "precision highp float;\n"
+//        "precision highp float;\n"
         "uniform sampler2D samplerBackground;\n"//背景图片纹理
         "uniform sampler2D samplerRipples;\n"//帧缓冲中的水波纹理，实际上保存的数据可以看做是水面的高度
         "uniform vec2 delta;\n"//水波精细度参数影响此变量，可以理解成采样点之间的距离
@@ -75,7 +75,7 @@ static const char* renderFrag=//render使用的片段着色器，水波算法的
 
 
 static const char* updateFrag=//update使用的片段着色器，水波算法核心部分，基于波动方程，不关注波源点及波源数量，以帧为单位同时更新整个水面的高度
-        "precision highp float;\n"
+//        "precision highp float;\n"
         "uniform sampler2D texture;\n"
         "uniform vec2 delta;\n"
         "uniform float damping;\n"
@@ -97,7 +97,7 @@ static const char* updateFrag=//update使用的片段着色器，水波算法核
         "}\n";
 
 static const char* dropFrag=//drop使用的片段着色器，对帧缓冲中的数据进行操作，用来生成波源
-        "precision highp float;\n"
+//        "precision highp float;\n"
         "const float PI = 3.141592653589793;\n"
         "uniform sampler2D texture;\n"
         "uniform vec2 center;\n"
